@@ -43,6 +43,10 @@ import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.security.NoSuchAlgorithmException;
+import java.security.KeyStoreException;
+    
+import java.io.Console;
 
 /**
  * Class used to add the server's certificate to the KeyStore
@@ -54,26 +58,34 @@ public class InstallCert {
         String host;
         int port;
         char[] passphrase;
+	String f;
         if ((args.length == 1) || (args.length == 2)) {
             String[] c = args[0].split(":");
             host = c[0];
             port = (c.length == 1) ? 443 : Integer.parseInt(c[1]);
-            String p = (args.length == 1) ? "changeit" : args[1];
-            passphrase = p.toCharArray();
+	    f = (args.length == 1) ? "jssecacerts" : args[1];
+            // f = (args.length == 1) ? "changeit" : args[1];
+	    Console console = System.console();
+	    if (console == null) {
+		System.out.println("assuming default passphrase");
+		passphrase = "changeit".toCharArray();
+	    } else {
+		passphrase = console.readPassword("enter passphrase (empty for default)");
+		if (passphrase.toString().equals("")) passphrase = "changeit".toCharArray();
+	    }
         } else {
-            System.out.println("Usage: java InstallCert <host>[:port] [passphrase]");
+            System.out.println("Usage: java InstallCert <host>[:port] [outputfile]");
             return;
         }
-
-        File file = new File("jssecacerts");
+        File file = new File(f);
         if (file.isFile() == false) {
-            char SEP = File.separatorChar;
-            File dir = new File(System.getProperty("java.home") + SEP
-                    + "lib" + SEP + "security");
-            file = new File(dir, "jssecacerts");
-            if (file.isFile() == false) {
-                file = new File(dir, "cacerts");
-            }
+	    try (FileOutputStream fileOutputStream = new FileOutputStream(f)) {
+		KeyStore keystore = KeyStore.getInstance("jks");
+		keystore.load(null, passphrase);
+		keystore.store(fileOutputStream, passphrase);
+	    } catch (CertificateException | NoSuchAlgorithmException | IOException | KeyStoreException e) {
+		e.printStackTrace();
+	    }
         }
         System.out.println("Loading KeyStore " + file + "...");
         InputStream in = new FileInputStream(file);
@@ -144,7 +156,7 @@ public class InstallCert {
         String alias = host + "-" + (k + 1);
         ks.setCertificateEntry(alias, cert);
 
-        OutputStream out = new FileOutputStream("jssecacerts");
+        OutputStream out = new FileOutputStream(f);
         ks.store(out, passphrase);
         out.close();
 
@@ -152,7 +164,7 @@ public class InstallCert {
         System.out.println(cert);
         System.out.println();
         System.out.println
-                ("Added certificate to keystore 'jssecacerts' using alias '"
+                ("Added certificate to keystore '" + f + "' using alias '"
                         + alias + "'");
     }
 
